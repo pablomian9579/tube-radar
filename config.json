@@ -1,0 +1,31 @@
+{
+  "region": "KR",
+  "language": "ko",
+  "keywords": [
+    "영화 요약",
+    "영화 결말 포함",
+    "영화 리뷰 몰아보기",
+    "드라마 몰아보기",
+    "드라마 요약",
+    "넷플릭스 드라마 결말",
+    "애니 요약",
+    "썰",
+    "레전드 썰",
+    "사연 라디오",
+    "실화 사건",
+    "미스터리 실화",
+    "소름 실화",
+    "참교육 썰"
+  ],
+  "search_days": 7,
+  "search_shorts_too": true,
+  "popular_categories": ["", "1", "24", "22"],
+  "popular_pages": 2,
+  "daily_unit_budget": 8000,
+  "max_channels": 2500,
+  "max_videos": 6000,
+  "upload_crawl_channels": 400,
+  "video_max_age_days": 45,
+  "watch_channels": [],
+  "rpm_krw": 0
+}

@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Tube Radar</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23ff4d4f'/><path d='M13 10l9 6-9 6z' fill='white'/></svg>">
+<style>
+:root{
+  --bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;--text:#e8eaf0;--muted:#8b93a7;
+  --accent:#ff4d4f;--accent2:#ff7a45;--good:#36cfc9;--up:#52c41a;--down:#ff4d4f;--warn:#faad14;--chip:#252a35;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{max-width:1400px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{font-weight:800;font-size:18px;display:flex;align-items:center;gap:8px;letter-spacing:-.3px}
+.logo i{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,var(--accent2),var(--accent));display:inline-block;position:relative}
+.logo i:after{content:"";position:absolute;inset:-5px;border:2px solid rgba(255,77,79,.35);border-radius:50%;animation:ping 2.4s infinite}
+@keyframes ping{0%{transform:scale(.7);opacity:1}100%{transform:scale(1.5);opacity:0}}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;padding:7px 12px;border-radius:8px;color:var(--muted);cursor:pointer;font-weight:600}
+nav button.on{background:var(--panel2);color:var(--text)}
+nav button:hover{color:var(--text)}
+.status{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--up)}
+.dot.warn{background:var(--warn)}.dot.err{background:var(--down)}
+main{max-width:1400px;margin:0 auto;padding:16px}
+h2{font-size:16px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+h2 small{color:var(--muted);font-weight:400;font-size:12px}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.tile .k{color:var(--muted);font-size:12px}.tile .v{font-size:24px;font-weight:800;margin-top:2px}.tile .s{color:var(--muted);font-size:12px}
+.list{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.row:last-child{border-bottom:0}.row:hover{background:var(--panel2)}
+.av{width:34px;height:34px;border-radius:50%;background:var(--chip);flex:none;object-fit:cover}
+.grow{flex:1;min-width:0}
+.ttl{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.big{font-weight:800;color:var(--accent2)}
+.badge{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--chip);font-size:11px;color:var(--muted);margin-right:3px;white-space:nowrap}
+.badge.hot{background:rgba(255,77,79,.15);color:#ff7875}
+.badge.gem{background:rgba(54,207,201,.14);color:var(--good)}
+.badge.sh{background:rgba(250,173,20,.14);color:var(--warn)}
+.score{display:inline-flex;align-items:center;justify-content:center;min-width:38px;padding:2px 6px;border-radius:7px;font-weight:800;font-size:12px}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.vcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.thumb{position:relative;aspect-ratio:16/9;background:#000;display:block}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .d{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.8);padding:0 5px;border-radius:4px;font-size:11px}
+.thumb .r{position:absolute;left:6px;top:6px;background:var(--accent);padding:1px 7px;border-radius:5px;font-size:12px;font-weight:800}
+.vbody{padding:10px;display:flex;flex-direction:column;gap:6px;flex:1}
+.vt{font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.9em}
+.vch{color:var(--muted);font-size:12px;cursor:pointer}.vch:hover{color:var(--text);text-decoration:underline}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:12px}
+.stats div{background:var(--panel2);border-radius:6px;padding:3px 6px}
+.stats b{display:block;font-size:13px}
+.stats span{color:var(--muted);font-size:10.5px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px}
+.f{display:flex;flex-direction:column;gap:3px}
+.f label{font-size:11px;color:var(--muted)}
+.f input,.f select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:0;width:110px}
+.f input.wide{width:200px}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600}
+.btn:hover{border-color:var(--muted)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.presets .btn.on{border-color:var(--accent);color:#ff7875}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;position:sticky;top:0;background:var(--panel)}
+th.n,td.n{text-align:right}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel2)}
+.tw{overflow:auto}
+.up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--muted)}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+.notice{border:1px solid rgba(250,173,20,.4);background:rgba(250,173,20,.08);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.notice.err{border-color:rgba(255,77,79,.5);background:rgba(255,77,79,.08)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:30px 12px}
+.modal.on{display:flex}
+.mbox{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:min(1000px,100%);padding:18px}
+.mhead{display:flex;gap:14px;align-items:center}
+.mhead img{width:64px;height:64px;border-radius:50%}
+.x{margin-left:auto;background:none;border:0;font-size:24px;cursor:pointer;color:var(--muted)}
+textarea{width:100%;min-height:70px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px}
+.chart{width:100%;height:170px}
+.more{display:block;margin:16px auto 0}
+.fav{background:none;border:0;cursor:pointer;font-size:16px;color:var(--muted);padding:0 4px}
+.fav.on{color:var(--warn)}
+code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
+.help p{margin:6px 0;color:#c7cbd6}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="logo"><i></i>Tube Radar</div>
+  <nav id="nav">
+    <button data-v="dash" class="on">대시보드</button>
+    <button data-v="videos">데일리 떡상</button>
+    <button data-v="channels">채널 탐색</button>
+    <button data-v="top">Top 300</button>
+    <button data-v="favs">찜</button>
+    <button data-v="log">스캔 기록</button>
+  </nav>
+  <div class="status" id="status"><span class="dot"></span>불러오는 중…</div>
+</div></header>
+<main id="app"><div class="empty">데이터 불러오는 중…</div></main>
+
+<div class="modal" id="modal"><div class="mbox" id="mbox"></div></div>
+
+<script>
+// ---------------- 데이터 ----------------
+const S = {videos:{}, channels:{}, ranks:{}, meta:{}, view:'dash', favs:{}};
+const LS = {
+  get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+S.favs = LS.get('tr_favs',{});
+const saveFavs=()=>LS.set('tr_favs',S.favs);
+
+async function loadAll(){
+  const t='?t='+Date.now();
+  const get=async n=>{try{const r=await fetch('data/'+n+t);if(!r.ok)return null;return await r.json()}catch(e){return null}};
+  const [v,c,r,m]=await Promise.all(['videos.json','channels.json','ranks.json','meta.json'].map(get));
+  S.videos=v||{};S.channels=c||{};S.ranks=r||{};S.meta=m||{};
+  for(const [id,x] of Object.entries(S.videos)){x.id=id;x.chn=S.channels[x.ch]}
+  for(const [id,x] of Object.entries(S.channels)){x.id=id}
+  S.V=Object.values(S.videos).filter(v=>v.chn);
+  S.C=Object.values(S.channels);
+  const days=Object.keys(S.ranks).sort();
+  S.rankNow=S.ranks[days.at(-1)]||[];S.rankPrev=days.length>1?S.ranks[days.at(-2)]:null;
+  S.rankPos={};S.rankNow.forEach((id,i)=>S.rankPos[id]=i+1);
+  S.prevPos={};(S.rankPrev||[]).forEach((id,i)=>S.prevPos[id]=i+1);
+  renderStatus();render();
+}
+
+// ---------------- 포맷 ----------------
+const fmt=n=>{if(n==null||isNaN(n))return'–';const a=Math.abs(n);
+  if(a>=1e8)return(n/1e8).toFixed(a>=1e9?0:1).replace(/\.0$/,'')+'억';
+  if(a>=1e4)return(n/1e4).toFixed(a>=1e5?0:1).replace(/\.0$/,'')+'만';
+  if(a>=1e3)return(n/1e3).toFixed(1).replace(/\.0$/,'')+'천';
+  return Math.round(n).toLocaleString()};
+const ago=ts=>{if(!ts)return'–';const s=Date.now()/1000-ts;
+  if(s<3600)return Math.max(1,Math.round(s/60))+'분 전';if(s<86400)return Math.round(s/3600)+'시간 전';
+  return Math.round(s/86400)+'일 전'};
+const dur=s=>{if(!s)return'';const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+  return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const scoreColor=s=>{s=s||0;const h=s>=80?0:s>=60?20:s>=40?40:s>=20?190:220;return`background:hsla(${h},85%,55%,.18);color:hsl(${h},90%,68%)`};
+const score=s=>`<span class="score" style="${scoreColor(s)}">${s==null?'–':Math.round(s)}</span>`;
+const ytV=id=>'https://www.youtube.com/watch?v='+id, ytC=c=>'https://www.youtube.com/'+(c.h||('channel/'+c.id));
+const ageTxt=d=>d==null?'–':d<60?d+'일':d<730?Math.round(d/30)+'개월':(d/365).toFixed(1)+'년';
+
+function renderStatus(){
+  const m=S.meta, run=(m.runs||[])[0], el=document.getElementById('status');
+  if(!run){el.innerHTML='<span class="dot warn"></span>아직 스캔 기록 없음';return}
+  const cls=run.status==='ok'?'':run.status==='quota'?'warn':'err';
+  el.innerHTML=`<span class="dot ${cls}"></span>마지막 스캔 ${ago(run.at)} · 오늘 쿼터 ${fmt(m.quota?.used||0)}/10,000`;
+}
+
+// ---------------- 공통 조각 ----------------
+function chRow(c,right){
+  return `<div class="row" onclick="openCh('${c.id}')">
+    <img class="av" loading="lazy" src="${esc(c.th)}" onerror="this.style.visibility='hidden'">
+    <div class="grow"><div class="ttl">${esc(c.t)}</div>
+    <div class="sub">구독 ${fmt(c.subs)} · 개설 ${ageTxt(c.ageD)}${c.shr!=null?` · 쇼츠 ${Math.round(c.shr*100)}%`:''}</div></div>
+    ${right}</div>`;
+}
+function vCard(v,rankBadge){
+  const c=v.chn, tags=[];
+  if(v.sh)tags.push('<span class="badge sh">쇼츠</span>');
+  if(v.ratio>=10)tags.push(`<span class="badge hot">구독자의 ${fmt(v.ratio)}배</span>`);
+  if(v.lr!=null&&v.lr<1.5&&v.v>=30000)tags.push(`<span class="badge gem">좋아요 ${v.lr}%</span>`);
+  if(c.ageD!=null&&c.ageD<=180)tags.push('<span class="badge">신생 채널</span>');
+  return `<div class="vcard">
+    <a class="thumb" href="${ytV(v.id)}" target="_blank" rel="noopener">
+      <img loading="lazy" src="${esc(v.th)}" alt="">${rankBadge?`<span class="r">${rankBadge}</span>`:''}<span class="d">${dur(v.dur)}</span></a>
+    <div class="vbody">
+      <a class="vt" href="${ytV(v.id)}" target="_blank" rel="noopener" title="${esc(v.t)}">${esc(v.t)}</a>
+      <div class="vch" onclick="openCh('${c.id}')">${esc(c.t)} · 구독 ${fmt(c.subs)} · ${ago(v.pub)}</div>
+      <div>${tags.join('')}</div>
+      <div class="stats">
+        <div><span>조회수</span><b>${fmt(v.v)}</b></div>
+        <div><span>24h 증가${v.gEst?'*':''}</span><b class="big">${v.g24!=null?'+'+fmt(v.g24):'–'}</b></div>
+        <div><span>구독 대비</span><b>${v.ratio!=null?fmt(v.ratio)+'배':'–'}</b></div>
+      </div>
+    </div></div>`;
+}
+const favBtn=id=>`<button class="fav ${S.favs[id]?'on':''}" title="찜" onclick="event.stopPropagation();toggleFav('${id}')">★</button>`;
+function toggleFav(id){
+  const c=S.channels[id];if(!c)return;
+  if(S.favs[id])delete S.favs[id];else S.favs[id]={at:Date.now()/1000,subs:c.subs,views:c.views,memo:''};
+  saveFavs();render();if(document.getElementById('modal').classList.contains('on'))openCh(id);
+}
+
+// ---------------- 대시보드 ----------------
+function vDash(){
+  const m=S.meta, run=(m.runs||[])[0];
+  let warn='';
+  if(!run)warn=`<div class="notice"><b>아직 첫 스캔 전입니다.</b> GitHub 저장소의 Actions 탭에서 "Tube Radar 스캔" → Run workflow 를 누르면 몇 분 뒤 데이터가 채워집니다. ${actionsLink()}</div>`;
+  else if(run.status==='error')warn=`<div class="notice err"><b>마지막 스캔 실패</b> — ${esc((run.log||[]).slice(-1)[0]||'')} ${actionsLink()}</div>`;
+  else if(run.status==='quota')warn=`<div class="notice">마지막 스캔이 쿼터 한도로 일부만 수집됐습니다. 내일 자동으로 이어서 수집합니다.</div>`;
+  const obsDays=Object.keys(S.ranks).length;
+  if(run&&obsDays<2)warn+=`<div class="notice">급상승(24h 증가) 수치는 같은 영상을 두 번 이상 관측해야 정확해집니다. 지금 보이는 <b>*</b> 표시 값은 업로드 후 평균 속도로 낸 추정치입니다.</div>`;
+
+  const radar=[...S.C].filter(c=>c.g24>0).sort((a,b)=>b.g24-a.g24).slice(0,10);
+  const newbie=S.C.filter(c=>c.ageD!=null&&c.ageD<=180).sort((a,b)=>b.rocket-a.rocket).slice(0,10);
+  const hits=S.V.filter(v=>v.age<=48&&v.ratio!=null&&v.v>=5000).sort((a,b)=>b.ratio-a.ratio).slice(0,8);
+  const lowLike=S.V.filter(v=>v.age<=7*24&&v.lr!=null&&v.lr<1.5&&v.v>=50000).sort((a,b)=>(b.g24||0)-(a.g24||0)).slice(0,10);
+  const gems=S.C.filter(c=>(c.subs??1e9)<=100000&&c.n>=3).sort((a,b)=>b.honey-a.honey).slice(0,10);
+
+  return `${warn}
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card tile"><div class="k">추적 중인 채널</div><div class="v">${fmt(S.C.length)}</div><div class="s">매일 수치 갱신</div></div>
+    <div class="card tile"><div class="k">추적 중인 영상</div><div class="v">${fmt(S.V.length)}</div><div class="s">최근 ${m.cfg?.video_max_age_days||45}일 업로드</div></div>
+    <div class="card tile"><div class="k">오늘 쓴 쿼터</div><div class="v">${fmt(m.quota?.used||0)}</div><div class="s">하루 무료 10,000 units</div></div>
+    <div class="card tile"><div class="k">데이터 쌓인 날</div><div class="v">${obsDays}일</div><div class="s">오래 쌓일수록 정확해짐</div></div>
+  </div>
+  <div class="grid g3">
+    <div class="card"><h2>🚀 급상승 레이더 <small>최근 24시간 조회수 증가</small></h2><div class="list">
+      ${radar.map(c=>chRow(c,`<div class="num"><div class="big">+${fmt(c.g24)}</div><div class="sub">떡상 ${Math.round(c.rocket)}</div></div>`)).join('')||'<div class="empty">데이터 부족</div>'}
+    </div></div>
+    <div class="card"><h2>🌱 신생 떡상 <small>개설 6개월 이내</small></h2><div class="list">
+      ${newbie.map(c=>chRow(c,`<div class="num">${score(c.rocket)}<div class="sub">+${fmt(c.g24)}/일</div></div>`)).join('')||'<div class="empty">아직 없음</div>'}
+    </div></div>
+    <div class="card"><h2>💎 히든 젬 <small>구독 10만 이하 · 꿀통 지수</small></h2><div class="list">
+      ${gems.map(c=>chRow(c,`<div class="num">${score(c.honey)}<div class="sub">평균 ${fmt(c.med)}회</div></div>`)).join('')||'<div class="empty">아직 없음</div>'}
+    </div></div>
+  </div>
+  <h2 style="margin-top:22px">🎯 오늘의 한 방 <small>48시간 내 업로드 · 구독자 대비 조회수 순</small></h2>
+  <div class="vgrid">${hits.map((v,i)=>vCard(v,i+1)).join('')||'<div class="empty">48시간 내 영상 없음</div>'}</div>
+  <h2 style="margin-top:22px">🤫 좋아요는 적은데 조회수 터진 영상 <small>7일 내 · 좋아요율 1.5% 미만 · 5만회 이상</small></h2>
+  <div class="vgrid">${lowLike.map(v=>vCard(v)).join('')||'<div class="empty">조건에 맞는 영상 없음</div>'}</div>`;
+}
+
+// ---------------- 영상 탐색 ----------------
+const VF=LS.get('tr_vf',{q:'',type:'all',days:'7',subMin:'',subMax:'',vMin:'',ratioMin:'',lrMax:'',sort:'g24'});
+let vLimit=60;
+function vVideos(){
+  const f=VF, now=Date.now()/1000;
+  let list=S.V.filter(v=>{
+    const c=v.chn;
+    if(f.q&&!(v.t+' '+c.t).toLowerCase().includes(f.q.toLowerCase()))return false;
+    if(f.type==='sh'&&!v.sh)return false;if(f.type==='long'&&v.sh)return false;
+    if(f.days&&now-v.pub>f.days*86400)return false;
+    if(f.subMin&&(c.subs??0)<+f.subMin)return false;if(f.subMax&&(c.subs??1e12)>+f.subMax)return false;
+    if(f.vMin&&v.v<+f.vMin)return false;
+    if(f.ratioMin&&(v.ratio??0)<+f.ratioMin)return false;
+    if(f.lrMax&&(v.lr==null||v.lr>+f.lrMax))return false;
+    return !v.live;
+  });
+  const key={g24:v=>v.g24||0,ratio:v=>v.ratio||0,vph:v=>v.vph||0,v:v=>v.v||0,new:v=>v.pub||0}[f.sort];
+  list.sort((a,b)=>key(b)-key(a));
+  const sel=(k,opts)=>`<select onchange="setVF('${k}',this.value)">${opts.map(([v,t])=>`<option value="${v}" ${f[k]==v?'selected':''}>${t}</option>`).join('')}</select>`;
+  const inp=(k,ph,w)=>`<input ${w?'class="wide"':''} value="${esc(f[k])}" placeholder="${ph}" onchange="setVF('${k}',this.value)">`;
+  return `<div class="filters">
+    <div class="f"><label>검색 (제목·채널)</label>${inp('q','예: 결말',1)}</div>
+    <div class="f"><label>형식</label>${sel('type',[['all','전체'],['sh','쇼츠'],['long','롱폼']])}</div>
+    <div class="f"><label>업로드</label>${sel('days',[['1','24시간'],['3','3일'],['7','7일'],['30','30일'],['','전체']])}</div>
+    <div class="f"><label>구독자 최소</label>${inp('subMin','0')}</div>
+    <div class="f"><label>구독자 최대</label>${inp('subMax','예: 100000')}</div>
+    <div class="f"><label>조회수 최소</label>${inp('vMin','예: 10000')}</div>
+    <div class="f"><label>구독 대비 배율 ≥</label>${inp('ratioMin','예: 5')}</div>
+    <div class="f"><label>좋아요율(%) ≤</label>${inp('lrMax','예: 1.5')}</div>
+    <div class="f"><label>정렬</label>${sel('sort',[['g24','24시간 증가'],['ratio','구독 대비 배율'],['vph','시간당 조회수'],['v','총 조회수'],['new','최신순']])}</div>
+    <button class="btn" onclick="resetVF()">초기화</button>
+  </div>
+  <div class="sub" style="margin-bottom:10px">${fmt(list.length)}개 영상 · * 표시는 관측 1회뿐이라 업로드 후 평균 속도로 낸 추정치</div>
+  <div class="vgrid">${list.slice(0,vLimit).map((v,i)=>vCard(v,i+1)).join('')||'<div class="empty">조건에 맞는 영상이 없습니다</div>'}</div>
+  ${list.length>vLimit?`<button class="btn more" onclick="vLimit+=60;render()">더 보기 (${fmt(list.length-vLimit)}개 남음)</button>`:''}`;
+}
+function setVF(k,v){VF[k]=v.trim();LS.set('tr_vf',VF);vLimit=60;render()}
+function resetVF(){Object.assign(VF,{q:'',type:'all',days:'7',subMin:'',subMax:'',vMin:'',ratioMin:'',lrMax:'',sort:'g24'});LS.set('tr_vf',VF);render()}
+
+// ---------------- 채널 탐색 ----------------
+const PRESETS={
+  gem:{n:'💎 히든 젬',d:'구독 10만 이하인데 최근 영상이 구독자보다 훨씬 많이 나옴',f:{subMax:100000,honeyMin:60,sort:'honey'}},
+  newbie:{n:'🌱 신생 떡상',d:'개설 6개월 이내 + 떡상 지수 40 이상',f:{ageMax:180,rocketMin:40,sort:'rocket'}},
+  small:{n:'🐣 소형 급성장',d:'구독 1만 이하인데 하루 1만회 이상 증가',f:{subMax:10000,g24Min:10000,sort:'g24'}},
+  shorts:{n:'⚡ 쇼츠 꿀통',d:'쇼츠 비중 70% 이상 + 꿀통 50 이상',f:{shType:'sh',honeyMin:50,sort:'honey'}},
+  long:{n:'🎬 롱폼 꿀통',d:'롱폼 위주 + 꿀통 50 이상',f:{shType:'long',honeyMin:50,sort:'honey'}},
+};
+const CF0={q:'',subMin:'',subMax:'',honeyMin:'',rocketMin:'',g24Min:'',ageMax:'',shType:'all',sort:'rocket',preset:''};
+const CF=LS.get('tr_cf',{...CF0});
+let cLimit=100;
+function filterChannels(f){
+  return S.C.filter(c=>{
+    if(f.q&&!c.t.toLowerCase().includes(f.q.toLowerCase()))return false;
+    if(f.subMin&&(c.subs??0)<+f.subMin)return false;if(f.subMax&&(c.subs??1e12)>+f.subMax)return false;
+    if(f.honeyMin&&(c.honey??0)<+f.honeyMin)return false;if(f.rocketMin&&(c.rocket??0)<+f.rocketMin)return false;
+    if(f.g24Min&&(c.g24??0)<+f.g24Min)return false;if(f.ageMax&&(c.ageD??1e9)>+f.ageMax)return false;
+    if(f.shType==='sh'&&!(c.shr>=0.7))return false;if(f.shType==='long'&&!(c.shr!=null&&c.shr<=0.3))return false;
+    return true;
+  });
+}
+const CSORT={rocket:c=>c.rocket||0,honey:c=>c.honey||0,g24:c=>c.g24||0,subs:c=>c.subs||0,sg:c=>c.sg||0,med:c=>c.med||0,young:c=>-(c.ageD??1e9)};
+function chTable(list,withRank){
+  return `<div class="card tw"><table><thead><tr>
+    ${withRank?'<th class="n">순위</th><th class="n">변동</th>':''}<th></th><th>채널</th>
+    <th class="n" onclick="sortC('subs')">구독자</th><th class="n" onclick="sortC('sg')">구독 증가/일</th>
+    <th class="n" onclick="sortC('g24')">24h 조회 증가</th><th class="n" onclick="sortC('med')">최근 영상 중앙값</th>
+    <th class="n" onclick="sortC('honey')">꿀통</th><th class="n" onclick="sortC('rocket')">떡상</th><th class="n" onclick="sortC('young')">개설</th>
+    ${S.meta.cfg?.rpm_krw?'<th class="n">월 예상 수익</th>':''}
+  </tr></thead><tbody>
+  ${list.map((c,i)=>{
+    let ch='';if(withRank){const p=S.prevPos[c.id],n=i+1;ch=!S.rankPrev?'<span class="mut">–</span>':!p?'<span class="up">NEW</span>':p>n?`<span class="up">▲${p-n}</span>`:p<n?`<span class="down">▼${n-p}</span>`:'<span class="mut">–</span>'}
+    return `<tr onclick="openCh('${c.id}')">
+    ${withRank?`<td class="n"><b>${i+1}</b></td><td class="n">${ch}</td>`:''}
+    <td>${favBtn(c.id)}</td>
+    <td><div style="display:flex;gap:8px;align-items:center"><img class="av" loading="lazy" src="${esc(c.th)}"><div style="min-width:0"><div class="ttl" style="max-width:280px">${esc(c.t)}</div>
+      <div class="sub">${c.shr!=null?(c.shr>=0.7?'<span class="badge sh">쇼츠 위주</span>':c.shr<=0.3?'<span class="badge">롱폼 위주</span>':'<span class="badge">혼합</span>'):''}최근 ${c.n||0}개 영상</div></div></div></td>
+    <td class="n">${fmt(c.subs)}</td><td class="n ${c.sg>0?'up':''}">${c.sg!=null?(c.sg>0?'+':'')+fmt(c.sg):'–'}</td>
+    <td class="n big">${c.g24?'+'+fmt(c.g24):'–'}</td><td class="n">${fmt(c.med)}</td>
+    <td class="n">${score(c.honey)}</td><td class="n">${score(c.rocket)}</td><td class="n">${ageTxt(c.ageD)}</td>
+    ${S.meta.cfg?.rpm_krw?`<td class="n">${monthRev(c)}</td>`:''}</tr>`}).join('')}
+  </tbody></table>${list.length?'':'<div class="empty">조건에 맞는 채널이 없습니다</div>'}</div>`;
+}
+function vChannels(){
+  const f=CF;let list=filterChannels(f);list.sort((a,b)=>CSORT[f.sort](b)-CSORT[f.sort](a));
+  const inp=(k,l,ph,w)=>`<div class="f"><label>${l}</label><input ${w?'class="wide"':''} value="${esc(f[k])}" placeholder="${ph}" onchange="setCF('${k}',this.value)"></div>`;
+  return `<div class="presets">${Object.entries(PRESETS).map(([k,p])=>`<button class="btn ${f.preset===k?'on':''}" title="${p.d}" onclick="preset('${k}')">${p.n}</button>`).join('')}
+    <button class="btn" onclick="preset('')">필터 해제</button></div>
+  ${f.preset?`<div class="sub" style="margin-bottom:10px">${PRESETS[f.preset].d}</div>`:''}
+  <div class="filters">
+    ${inp('q','채널 이름','검색',1)}${inp('subMin','구독자 최소','0')}${inp('subMax','구독자 최대','예: 100000')}
+    ${inp('honeyMin','꿀통 ≥','0~100')}${inp('rocketMin','떡상 ≥','0~100')}${inp('g24Min','24h 증가 ≥','예: 10000')}${inp('ageMax','개설 며칠 이내','예: 365')}
+    <div class="f"><label>형식</label><select onchange="setCF('shType',this.value)">${[['all','전체'],['sh','쇼츠 위주'],['long','롱폼 위주']].map(([v,t])=>`<option value="${v}" ${f.shType==v?'selected':''}>${t}</option>`).join('')}</select></div>
+  </div>
+  <div class="sub" style="margin-bottom:10px">${fmt(list.length)}개 채널 · 표 머리글을 누르면 정렬</div>
+  ${chTable(list.slice(0,cLimit))}
+  ${list.length>cLimit?`<button class="btn more" onclick="cLimit+=100;render()">더 보기</button>`:''}`;
+}
+function setCF(k,v){CF[k]=v.trim();CF.preset='';LS.set('tr_cf',CF);cLimit=100;render()}
+function sortC(k){if(S.view==='channels'){CF.sort=k;LS.set('tr_cf',CF);render()}}
+function preset(k){Object.assign(CF,CF0,k?PRESETS[k].f:{});CF.preset=k;LS.set('tr_cf',CF);render()}
+function monthRev(c){
+  const h=c.hist||[];if(h.length<2||!S.meta.cfg?.rpm_krw)return'–';
+  const a=h[0],b=h.at(-1),d=(new Date(b[0])-new Date(a[0]))/864e5;if(d<1||b[2]==null||a[2]==null)return'–';
+  return '₩'+fmt((b[2]-a[2])/d*30/1000*S.meta.cfg.rpm_krw);
+}
+
+// ---------------- Top 300 ----------------
+function vTop(){
+  const list=S.rankNow.map(id=>S.channels[id]).filter(Boolean);
+  return `<h2>🏆 떡상 지수 Top 300 <small>${Object.keys(S.ranks).sort().at(-1)||''} 기준 · 변동은 전날 대비</small></h2>${chTable(list,true)}`;
+}
+
+// ---------------- 찜 ----------------
+function vFavs(){
+  const ids=Object.keys(S.favs);
+  const rows=ids.map(id=>{const c=S.channels[id],f=S.favs[id];return{id,c,f}});
+  return `<h2>⭐ 찜한 채널 <small>찜한 시점 이후 성장 추적 · 이 브라우저에 저장됨</small></h2>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn" onclick="exportFavs()">찜 백업 (JSON)</button>
+    <label class="btn">찜 불러오기<input type="file" accept=".json" class="hide" onchange="importFavs(this)"></label>
+    <button class="btn" onclick="copyWatch()">채널 ID 목록 복사 (config.json 의 watch_channels 용)</button>
+  </div>
+  <div class="card tw"><table><thead><tr><th></th><th>채널</th><th class="n">찜한 날</th><th class="n">당시 구독</th><th class="n">현재 구독</th><th class="n">구독 증가</th><th class="n">조회수 증가</th><th class="n">떡상</th><th>메모</th></tr></thead><tbody>
+  ${rows.map(({id,c,f})=>c?`<tr onclick="openCh('${id}')"><td>${favBtn(id)}</td><td><div style="display:flex;gap:8px;align-items:center"><img class="av" src="${esc(c.th)}"><span class="ttl">${esc(c.t)}</span></div></td>
+    <td class="n">${new Date(f.at*1000).toLocaleDateString('ko-KR')}</td><td class="n">${fmt(f.subs)}</td><td class="n">${fmt(c.subs)}</td>
+    <td class="n ${c.subs-f.subs>0?'up':''}">${c.subs!=null&&f.subs!=null?(c.subs-f.subs>=0?'+':'')+fmt(c.subs-f.subs):'–'}</td>
+    <td class="n">${c.views!=null&&f.views!=null?'+'+fmt(c.views-f.views):'–'}</td><td class="n">${score(c.rocket)}</td>
+    <td class="sub" style="max-width:220px">${esc(f.memo)}</td></tr>`
+    :`<tr><td>${favBtn(id)}</td><td colspan="8" class="mut">${id} — 추적 목록에서 빠짐 (config.json watch_channels 에 추가하면 계속 추적)</td></tr>`).join('')}
+  </tbody></table>${ids.length?'':'<div class="empty">채널 표나 상세 화면에서 ★ 를 누르면 여기에 모입니다</div>'}</div>`;
+}
+function exportFavs(){const b=new Blob([JSON.stringify(S.favs,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tube-radar-favs.json';a.click()}
+function importFavs(inp){const r=new FileReader();r.onload=()=>{try{Object.assign(S.favs,JSON.parse(r.result));saveFavs();render()}catch(e){alertBox('파일을 읽지 못했습니다')}};r.readAsText(inp.files[0])}
+function copyWatch(){const t=JSON.stringify(Object.keys(S.favs));navigator.clipboard?.writeText(t);alertBox('복사했습니다: '+t.slice(0,120)+(t.length>120?'…':''))}
+function alertBox(msg){const d=document.createElement('div');d.className='notice';d.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:99;max-width:90%';d.textContent=msg;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
+
+// ---------------- 스캔 기록 ----------------
+function actionsLink(){
+  const m=location.hostname.match(/^([^.]+)\.github\.io$/),repo=location.pathname.split('/').filter(Boolean)[0];
+  return m&&repo?`<a class="btn pri" style="display:inline-block;margin-top:6px" target="_blank" href="https://github.com/${m[1]}/${repo}/actions/workflows/scan.yml">GitHub Actions 열기 ↗</a>`:'';
+}
+function vLog(){
+  const m=S.meta,cfg=m.cfg||{};
+  return `<div class="grid g2">
+  <div class="card"><h2>최근 스캔 <small>자동: 매일 06시 전체 · 12·18·00시 갱신 (한국 시간)</small></h2>
+    <div style="margin-bottom:8px">${actionsLink()} <span class="sub">→ Run workflow 로 지금 바로 스캔</span></div>
+    ${(m.runs||[]).map(r=>`<details class="row" style="display:block;cursor:default"><summary style="cursor:pointer">
+      <span class="dot ${r.status==='ok'?'':r.status==='quota'?'warn':'err'}" style="display:inline-block;margin-right:6px"></span>
+      ${new Date(r.at*1000).toLocaleString('ko-KR')} · ${r.mode==='full'?'전체':'갱신'} · ${r.units} units · ${r.sec}초</summary>
+      <div class="sub" style="white-space:normal;margin-top:6px">${(r.log||[]).map(esc).join('<br>')}</div></details>`).join('')||'<div class="empty">기록 없음</div>'}
+  </div>
+  <div class="card help"><h2>설정과 지표 설명</h2>
+    <p><b>탐색 키워드</b> (${(cfg.keywords||[]).length}개): ${(cfg.keywords||[]).map(k=>`<span class="badge">${esc(k)}</span>`).join('')}</p>
+    <p>키워드·예산·RPM 은 GitHub 저장소의 <code>config.json</code> 을 고치면 바뀝니다. 키워드 1개 = 검색 2번 = 200 units.</p>
+    <p><b>24h 증가</b>: 약 하루 전 관측값과 지금 조회수 차이를 24시간으로 환산. <b>*</b> 는 관측이 1번뿐이라 업로드 후 평균 속도로 낸 추정치.</p>
+    <p><b>구독 대비 배율</b>: 영상 조회수 ÷ 채널 구독자 수.</p>
+    <p><b>꿀통 지수 (0~100)</b>: 최근 60일 영상(최대 12개) 조회수 중앙값 ÷ 구독자. 배율 1배≈42, 10배≈80, 25배 이상≈100. 영상 3개 미만이면 15% 감점.</p>
+    <p><b>떡상 지수 (0~100)</b>: 채널 최근 영상들의 24시간 조회수 증가 합계를 절대량(20×log)과 구독자 대비(30×log)로 점수화하고, 구독자 증가가 있으면 가산.</p>
+    <p><b>쇼츠 판별</b>: 60초 이하이거나, 3분 이하 영상 중 youtube.com/shorts 주소로 열리는 영상.</p>
+    <p class="mut">한계: 유튜브 전체를 훑을 수는 없습니다. 키워드 검색과 인기 차트로 찾은 채널을 계속 추적하는 방식이라, 키워드가 결과 품질을 좌우하고 데이터는 날이 갈수록 쌓입니다.</p>
+  </div></div>`;
+}
+
+// ---------------- 채널 상세 ----------------
+function lineChart(points,label){
+  const pts=points.filter(p=>p[1]!=null);if(pts.length<2)return`<div class="empty" style="padding:20px">${label}: 이틀 이상 쌓이면 그래프가 그려집니다</div>`;
+  const W=460,H=150,P=34,xs=pts.map((_,i)=>i),ys=pts.map(p=>p[1]),mn=Math.min(...ys),mx=Math.max(...ys),rg=mx-mn||1;
+  const X=i=>P+i*(W-P-8)/(pts.length-1),Y=v=>H-20-(v-mn)/rg*(H-40);
+  const d=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(p[1]).toFixed(1)).join('');
+  return `<div><div class="sub">${label}</div><svg class="chart" viewBox="0 0 ${W} ${H}">
+    <path d="${d} L${X(pts.length-1)},${H-20} L${X(0)},${H-20}Z" fill="rgba(255,122,69,.12)"/>
+    <path d="${d}" fill="none" stroke="#ff7a45" stroke-width="2"/>
+    <text x="2" y="${Y(mx)+4}" fill="#8b93a7" font-size="10">${fmt(mx)}</text><text x="2" y="${Y(mn)+4}" fill="#8b93a7" font-size="10">${fmt(mn)}</text>
+    <text x="${P}" y="${H-4}" fill="#8b93a7" font-size="10">${pts[0][0].slice(5)}</text><text x="${W-8}" y="${H-4}" fill="#8b93a7" font-size="10" text-anchor="end">${pts.at(-1)[0].slice(5)}</text>
+  </svg></div>`;
+}
+function openCh(id){
+  const c=S.channels[id];if(!c)return;
+  const vids=S.V.filter(v=>v.ch===id).sort((a,b)=>b.pub-a.pub);
+  const fav=S.favs[id];
+  document.getElementById('mbox').innerHTML=`
+  <div class="mhead"><img src="${esc(c.th)}"><div><div style="font-size:20px;font-weight:800">${esc(c.t)} ${favBtn(id)}</div>
+    <div class="sub">구독 ${fmt(c.subs)} · 총 조회 ${fmt(c.views)} · 영상 ${fmt(c.vc)}개 · 개설 ${ageTxt(c.ageD)}${c.cc?' · '+c.cc:''}</div>
+    <a class="btn" style="display:inline-block;margin-top:6px" href="${ytC(c)}" target="_blank" rel="noopener">유튜브에서 보기 ↗</a></div>
+    <button class="x" onclick="closeM()">×</button></div>
+  <div class="grid g4" style="margin:14px 0">
+    <div class="card tile"><div class="k">떡상 지수</div><div class="v">${score(c.rocket)}</div><div class="s">Top 300 ${S.rankPos[id]?S.rankPos[id]+'위':'밖'}</div></div>
+    <div class="card tile"><div class="k">꿀통 지수</div><div class="v">${score(c.honey)}</div><div class="s">구독 대비 ${c.honeyR!=null?c.honeyR+'배':'–'}</div></div>
+    <div class="card tile"><div class="k">24h 조회 증가</div><div class="v big">${c.g24?'+'+fmt(c.g24):'–'}</div><div class="s">구독 ${c.sg!=null?(c.sg>=0?'+':'')+fmt(c.sg)+'/일':'증가 미측정'}</div></div>
+    <div class="card tile"><div class="k">최근 영상 중앙값</div><div class="v">${fmt(c.med)}</div><div class="s">최고 ${fmt(c.max)} · ${S.meta.cfg?.rpm_krw?'월 '+monthRev(c):'RPM 미설정'}</div></div>
+  </div>
+  <div class="grid g2">${lineChart((c.hist||[]).map(h=>[h[0],h[1]]),'구독자 추이')}${lineChart((c.hist||[]).map(h=>[h[0],h[2]]),'총 조회수 추이')}</div>
+  <h2 style="margin-top:14px">메모 ${fav?'':'<small>찜(★)하면 메모를 남길 수 있어요</small>'}</h2>
+  ${fav?`<textarea placeholder="벤치마킹 포인트, 썸네일 특징 등" oninput="S.favs['${id}'].memo=this.value;saveFavs()">${esc(fav.memo)}</textarea>`:''}
+  <h2 style="margin-top:14px">최근 영상 <small>추적 중인 ${vids.length}개</small></h2>
+  <div class="vgrid">${vids.slice(0,24).map(v=>vCard(v)).join('')}</div>`;
+  document.getElementById('modal').classList.add('on');
+}
+function closeM(){document.getElementById('modal').classList.remove('on')}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeM()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeM()});
+
+// ---------------- 라우팅 ----------------
+const VIEWS={dash:vDash,videos:vVideos,channels:vChannels,top:vTop,favs:vFavs,log:vLog};
+function render(){
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.view));
+  document.getElementById('app').innerHTML=VIEWS[S.view]();
+}
+document.getElementById('nav').addEventListener('click',e=>{const v=e.target.dataset?.v;if(v){S.view=v;location.hash=v;window.scrollTo(0,0);render()}});
+if(VIEWS[location.hash.slice(1)])S.view=location.hash.slice(1);
+addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(VIEWS[v]&&v!==S.view){S.view=v;closeM();render()}});
+loadAll();
+</script>
+</body>
+</html>
