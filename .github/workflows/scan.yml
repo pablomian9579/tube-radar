@@ -1,0 +1,103 @@
+name: Tube Radar 스캔
+
+on:
+  schedule:
+    - cron: "7 21 * * *"        # 한국 06:07 — 전체 스캔 (키워드 검색 포함)
+    - cron: "7 3,9,15 * * *"    # 한국 12:07 / 18:07 / 00:07 — 가벼운 갱신
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = 전체 스캔, light = 수치 갱신만, deploy = 화면만 다시 배포"
+        type: choice
+        options: [full, light, deploy]
+        default: full
+  push:
+    branches: [main]
+    paths: ["index.html", "config.json"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: tube-radar
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 모드 결정
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then M="${{ inputs.mode }}";
+          elif [ "${{ github.event_name }}" = "push" ]; then M="deploy";
+          elif [ "${{ github.event.schedule }}" = "7 21 * * *" ]; then M="full";
+          else M="light"; fi
+          echo "mode=$M" >> "$GITHUB_OUTPUT"
+          echo "실행 모드: $M"
+
+      - name: 저장된 데이터 불러오기 (data 브랜치)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p state && cd state
+          git init -q
+          git config user.name "tube-radar-bot"
+          git config user.email "tube-radar-bot@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin data; then
+            git checkout -q FETCH_HEAD
+            echo "기존 데이터 불러옴"; ls -la
+          else
+            echo "첫 실행 — 데이터 없음"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.mode.outputs.mode != 'deploy'
+        with:
+          python-version: "3.12"
+
+      - name: 유튜브 스캔
+        id: scan
+        if: steps.mode.outputs.mode != 'deploy'
+        continue-on-error: true
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: python scripts/scan.py --mode "${{ steps.mode.outputs.mode }}" --state state --config config.json
+
+      - name: 데이터 저장 (data 브랜치, 기록 1개만 유지)
+        if: steps.mode.outputs.mode != 'deploy'
+        run: |
+          cd state
+          git checkout -q --orphan snapshot
+          git add -A
+          git commit -q -m "data $(date -u +%FT%TZ)" || exit 0
+          git push -q -f origin HEAD:data
+
+      - name: 사이트 묶기
+        run: |
+          mkdir -p _site/data
+          cp index.html _site/
+          cp state/*.json _site/data/ 2>/dev/null || true
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 스캔 실패 표시
+        if: steps.scan.outcome == 'failure'
+        run: |
+          echo "스캔이 실패했습니다. 위 '유튜브 스캔' 단계 로그를 확인하세요."
+          exit 1
