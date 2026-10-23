@@ -19,7 +19,7 @@
   ],
   "search_days": 7,
   "search_shorts_too": true,
-  "popular_categories": ["", "1", "24", "22"],
+  "popular_categories": ["1", "24", "22"],
   "popular_pages": 2,
   "daily_unit_budget": 8000,
   "max_channels": 2500,
