@@ -126,10 +126,54 @@ const LS = {
 S.favs = LS.get('tr_favs',{});
 const saveFavs=()=>LS.set('tr_favs',S.favs);
 
+// ---------------- 잠금 ----------------
+const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const b64e=u=>btoa(String.fromCharCode(...new Uint8Array(u)));
+async function deriveKey(pw,box){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(box.salt),iterations:box.iter},base,256);
+  return b64e(bits);
+}
+async function unlock(box,rawKey){
+  const key=await crypto.subtle.importKey('raw',b64d(rawKey),'AES-GCM',false,['decrypt']);
+  const gz=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(box.iv)},key,b64d(box.ct));
+  const txt=await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return JSON.parse(txt);
+}
+function lockScreen(box,msg){
+  document.getElementById('nav').classList.add('hide');
+  document.getElementById('status').innerHTML='<span class="dot warn"></span>잠김';
+  document.getElementById('app').innerHTML=`<div class="card" style="max-width:380px;margin:80px auto;text-align:center">
+    <div style="font-size:34px">🔒</div><h2 style="justify-content:center">비밀번호를 입력하세요</h2>
+    <form id="lk" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+      <input id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px">
+      <label class="sub" style="display:flex;gap:6px;justify-content:center;align-items:center"><input type="checkbox" id="rem" checked>이 기기에서 기억하기</label>
+      <button class="btn pri" type="submit">열기</button>
+      <div class="sub" id="lkmsg" style="color:${msg?'#ff7875':'inherit'}">${msg||''}</div>
+    </form></div>`;
+  const pw=document.getElementById('pw');pw.focus();
+  document.getElementById('lk').onsubmit=async e=>{
+    e.preventDefault();document.getElementById('lkmsg').textContent='여는 중…';
+    try{const k=await deriveKey(pw.value,box);const data=await unlock(box,k);
+      if(document.getElementById('rem').checked)LS.set('tr_key',k);else sessionKey=k;
+      document.getElementById('nav').classList.remove('hide');apply(data);
+    }catch(err){lockScreen(box,'비밀번호가 맞지 않습니다')}
+  };
+}
+let sessionKey=null;
+function logout(){try{localStorage.removeItem('tr_key')}catch(e){}sessionKey=null;location.reload()}
+
 async function loadAll(){
-  const t='?t='+Date.now();
-  const get=async n=>{try{const r=await fetch('data/'+n+t);if(!r.ok)return null;return await r.json()}catch(e){return null}};
-  const [v,c,r,m]=await Promise.all(['videos.json','channels.json','ranks.json','meta.json'].map(get));
+  let box=null;
+  try{const r=await fetch('data/bundle.enc?t='+Date.now());if(r.ok)box=await r.json()}catch(e){}
+  if(!box){document.getElementById('app').innerHTML='<div class="notice err">데이터가 없습니다. GitHub 저장소 Settings → Secrets 에 SITE_PASSWORD 를 등록하고 스캔을 한 번 돌려주세요.</div>';
+    document.getElementById('status').innerHTML='<span class="dot err"></span>데이터 없음';return}
+  const k=sessionKey||LS.get('tr_key',null);
+  if(k){try{return apply(await unlock(box,k))}catch(e){try{localStorage.removeItem('tr_key')}catch(_){}}}
+  lockScreen(box,k?'비밀번호가 바뀌었습니다. 새 비밀번호를 입력하세요':'');
+}
+function apply(d){
+  const {videos:v,channels:c,ranks:r,meta:m}=d;
   S.videos=v||{};S.channels=c||{};S.ranks=r||{};S.meta=m||{};
   for(const [id,x] of Object.entries(S.videos)){x.id=id;x.chn=S.channels[x.ch]}
   for(const [id,x] of Object.entries(S.channels)){x.id=id}
@@ -163,7 +207,7 @@ function renderStatus(){
   const m=S.meta, run=(m.runs||[])[0], el=document.getElementById('status');
   if(!run){el.innerHTML='<span class="dot warn"></span>아직 스캔 기록 없음';return}
   const cls=run.status==='ok'?'':run.status==='quota'?'warn':'err';
-  el.innerHTML=`<span class="dot ${cls}"></span>마지막 스캔 ${ago(run.at)} · 오늘 쿼터 ${fmt(m.quota?.used||0)}/10,000`;
+  el.innerHTML=`<span class="dot ${cls}"></span>마지막 스캔 ${ago(run.at)} · 오늘 쿼터 ${fmt(m.quota?.used||0)}/10,000 <button class="btn" style="padding:2px 8px;font-size:12px" onclick="logout()">잠그기</button>`;
 }
 
 // ---------------- 공통 조각 ----------------
