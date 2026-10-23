@@ -421,8 +421,9 @@ def main():
             for vid in new_ids:
                 if vid in videos and src.get(vid) and src[vid] not in videos[vid]["src"]:
                     videos[vid]["src"].append(src[vid])
-            # 4) 채널 갱신
+            # 4) 채널 갱신 (차단 채널 제외)
             need_ch |= set(channels)
+            need_ch -= set(meta.get("blocked", [])) - watch
             update_channels(api, list(need_ch), channels)
             log.append(f"영상 {len(videos)}개 / 채널 {len(channels)}곳 갱신")
         except QuotaExceeded as e:
@@ -431,6 +432,26 @@ def main():
         except KeyInvalid as e:
             status = "error"
             log.append(f"API 키 오류: {e}")
+
+    # 제외 카테고리 (기본: 음악 10) — 해당 영상 삭제, 영상 절반 이상이 제외 카테고리인 채널은 차단
+    excl = set(str(x) for x in cfg.get("exclude_categories", ["10"]))
+    blocked = set(meta.get("blocked", []))
+    if excl:
+        tot, bad = {}, {}
+        for v in videos.values():
+            ch = v.get("ch")
+            tot[ch] = tot.get(ch, 0) + 1
+            if str(v.get("cat")) in excl:
+                bad[ch] = bad.get(ch, 0) + 1
+        newly = {ch for ch, n in bad.items() if n >= tot[ch] * 0.5} - watch
+        blocked |= newly
+        videos = {k: v for k, v in videos.items() if str(v.get("cat")) not in excl and v.get("ch") not in blocked}
+        removed = [c for c in channels if c in blocked and c not in watch]
+        for c in removed:
+            channels.pop(c, None)
+        if removed:
+            log.append(f"제외 카테고리({','.join(sorted(excl))}) 채널 {len(removed)}곳 정리")
+    meta["blocked"] = sorted(blocked)[-5000:]
 
     # 쇼츠 판별 (61~180초 애매한 영상만)
     if SHORTS_CHECK:
