@@ -61,9 +61,17 @@ jobs:
           fi
 
       - uses: actions/setup-python@v5
-        if: steps.mode.outputs.mode != 'deploy'
         with:
           python-version: "3.12"
+
+      - name: 암호화 도구 설치
+        run: pip install -q cryptography
+
+      - name: 저장 데이터 잠금 해제
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          DATA_KEY: ${{ secrets.DATA_KEY }}
+        run: python scripts/vault.py unpack state
 
       - name: 유튜브 스캔
         id: scan
@@ -73,21 +81,28 @@ jobs:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
         run: python scripts/scan.py --mode "${{ steps.mode.outputs.mode }}" --state state --config config.json
 
-      - name: 데이터 저장 (data 브랜치, 기록 1개만 유지)
-        if: steps.mode.outputs.mode != 'deploy'
+      - name: 데이터 저장 (암호화해서 data 브랜치에, 기록 1개만 유지)
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          DATA_KEY: ${{ secrets.DATA_KEY }}
         run: |
+          mkdir -p plain && cp state/*.json plain/ 2>/dev/null || true
+          if [ "${{ steps.mode.outputs.mode }}" = "deploy" ]; then exit 0; fi
+          python scripts/vault.py pack state
           cd state
           git checkout -q --orphan snapshot
           git add -A
           git commit -q -m "data $(date -u +%FT%TZ)" || exit 0
           git push -q -f origin HEAD:data
 
-      - name: 사이트 묶기
+      - name: 사이트 묶기 (비밀번호로 잠금)
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: |
           mkdir -p _site/data
           cp index.html _site/
-          cp state/*.json _site/data/ 2>/dev/null || true
           touch _site/.nojekyll
+          python scripts/vault.py site plain _site/data/bundle.enc
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
