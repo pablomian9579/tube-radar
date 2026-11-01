@@ -242,7 +242,16 @@ def search_keywords(api, cfg, log):
     after = (datetime.now(timezone.utc) - timedelta(days=cfg["search_days"])).strftime("%Y-%m-%dT%H:%M:%SZ")
     found = []
     variants = [None] + (["short"] if cfg.get("search_shorts_too") else [])
-    for kw in cfg["keywords"]:
+    # keywords = 매일 검색, keyword_pool = 매일 pool_per_day 개씩 돌아가며 검색 (쿼터 절약)
+    pool = cfg.get("keyword_pool") or []
+    per_day = cfg.get("pool_per_day", 15)
+    todays = []
+    if pool and per_day > 0:
+        day = int(NOW // 86400)
+        start = (day * per_day) % len(pool)
+        todays = [pool[(start + i) % len(pool)] for i in range(min(per_day, len(pool)))]
+        log.append(f"오늘의 로테이션 검색어 {len(todays)}개 / 전체 {len(pool)}개")
+    for kw in list(cfg["keywords"]) + todays:
         for dur in variants:
             data = api.get("search", part="id", q=kw, type="video", order="viewCount",
                            publishedAfter=after, regionCode=cfg["region"],
