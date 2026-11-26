@@ -83,6 +83,29 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel2)}
 .empty{padding:30px;text-align:center;color:var(--muted)}
 .notice{border:1px solid rgba(250,173,20,.4);background:rgba(250,173,20,.08);border-radius:12px;padding:12px 14px;margin-bottom:14px}
 .notice.err{border-color:rgba(255,77,79,.5);background:rgba(255,77,79,.08)}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;position:relative}
+.tcard:hover{border-color:var(--muted)}
+.tcard.seen{opacity:.55}
+.tthumb{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden}
+.tthumb img{width:100%;height:100%;object-fit:cover}
+.tthumb .r{position:absolute;left:6px;top:6px;background:var(--accent);padding:1px 7px;border-radius:5px;font-size:12px;font-weight:800}
+.tthumb .n{position:absolute;right:6px;top:6px;background:var(--good);color:#002;padding:1px 7px;border-radius:5px;font-size:11px;font-weight:800}
+.tthumb .d{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.8);padding:0 5px;border-radius:4px;font-size:11px}
+.tthumb .j{position:absolute;left:6px;bottom:6px;font-size:16px}
+.tbody{padding:8px 9px;display:flex;flex-direction:column;gap:4px}
+.tbody .vt{min-height:2.9em;font-size:13px}
+.tv{font-size:18px;font-weight:800}
+.words{display:flex;flex-wrap:wrap;gap:5px}
+.words span{background:var(--chip);border-radius:999px;padding:2px 9px;font-size:12px}
+.words b{color:var(--accent2);margin-left:3px}
+.tagbtn{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer}
+.tagbtn.on{background:rgba(255,122,69,.18);border-color:var(--accent2);color:#ffb38f}
+.judge{display:flex;gap:8px}
+.judge button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:700}
+.judge button.on.y{background:rgba(82,196,26,.18);border-color:var(--up)}
+.judge button.on.n{background:rgba(255,77,79,.15);border-color:var(--down)}
+.player{width:100%;max-width:360px;aspect-ratio:9/16;border:0;border-radius:12px;background:#000}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:30px 12px}
 .modal.on{display:flex}
 .mbox{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:min(1000px,100%);padding:18px}
@@ -103,7 +126,8 @@ code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
 <header><div class="bar">
   <div class="logo"><i></i>Tube Radar</div>
   <nav id="nav">
-    <button data-v="dash" class="on">대시보드</button>
+    <button data-v="trend" class="on">🎬 트렌드 레이더</button>
+    <button data-v="dash">대시보드</button>
     <button data-v="videos">데일리 떡상</button>
     <button data-v="channels">채널 탐색</button>
     <button data-v="top">Top 300</button>
@@ -118,7 +142,7 @@ code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
 
 <script>
 // ---------------- 데이터 ----------------
-const S = {videos:{}, channels:{}, ranks:{}, meta:{}, view:'dash', favs:{}};
+const S = {videos:{}, channels:{}, ranks:{}, meta:{}, view:'trend', favs:{}};
 const LS = {
   get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -243,6 +267,169 @@ function toggleFav(id){
   const c=S.channels[id];if(!c)return;
   if(S.favs[id])delete S.favs[id];else S.favs[id]={at:Date.now()/1000,subs:c.subs,views:c.views,memo:''};
   saveFavs();render();if(document.getElementById('modal').classList.contains('on'))openCh(id);
+}
+
+// ---------------- 트렌드 레이더 ----------------
+// 영상별 분석 기록: {id:{seen, j:1|-1, tags:[], memo, at}}
+S.tn = LS.get('tr_trend', {});
+const saveTn = () => LS.set('tr_trend', S.tn);
+const TAGS = ['후킹 강함','반전','감동','웃김','액션','긴장감','자막 스타일','내레이션','무음+BGM','실화','중년 공감','다시 보고 싶음'];
+const tcfg = () => Object.assign({days:10, min_views:500000}, S.meta.cfg?.trend || {});
+const TF0 = () => ({days:String(tcfg().days), min:String(tcfg().min_views), md:'1', unseen:'', sort:'v', q:''});
+const TF = Object.assign(TF0(), LS.get('tr_tf', {}));
+let tLimit = 60;
+const STOP = new Set(['shorts','short','쇼츠','숏츠','숏폼','youtube','유튜브','the','and','of','in','영상','이','그','저','더','수','것','진짜','ㅋㅋ','ㅋㅋㅋ','ㄷㄷ','fyp','viral','추천']);
+
+// 50만 회를 처음 넘긴 관측 시각
+function crossAt(v, min){
+  for(const h of v.hist || []) if(h[1] >= min) return h[0] * 3600;
+  return null;
+}
+function trendList(f){
+  const now = Date.now()/1000, min = +f.min || 0, days = +f.days || 10;
+  return S.V.filter(v => {
+    if(!v.sh || v.live) return false;
+    if(f.md && !v.md && !(v.src||[]).some(s => s.startsWith('tr:'))) return false;
+    if(now - v.pub > days*86400) return false;
+    if((v.v||0) < min) return false;
+    if(f.unseen && S.tn[v.id]?.seen) return false;
+    if(f.q && !(v.t+' '+v.chn.t).toLowerCase().includes(f.q.toLowerCase())) return false;
+    return true;
+  }).map(v => {
+    const c = crossAt(v, min);
+    v._new = c != null && now - c < 30*3600 && !((v.hist||[])[0] && v.hist[0][1] >= min && now - v.hist[0][0]*3600 > 30*3600);
+    return v;
+  });
+}
+function topWords(list){
+  const cnt = {};
+  for(const v of list){
+    const seen = new Set();
+    for(let w of v.t.toLowerCase().split(/[^가-힣a-z0-9#]+/)){
+      w = w.replace(/^#/, '');
+      if(w.length < 2 || STOP.has(w) || /^\d+$/.test(w) || seen.has(w)) continue;
+      seen.add(w); cnt[w] = (cnt[w]||0) + 1;
+    }
+  }
+  return Object.entries(cnt).filter(([,n]) => n >= 2).sort((a,b) => b[1]-a[1]).slice(0, 24);
+}
+function vTrend(){
+  const f = TF, list = trendList(f);
+  const key = {v:v=>v.v||0, g24:v=>v.g24||0, ratio:v=>v.ratio||0, new:v=>v.pub||0}[f.sort] || (v=>v.v||0);
+  list.sort((a,b) => key(b) - key(a));
+  const nNew = list.filter(v => v._new).length;
+  const durs = list.map(v => v.dur).filter(Boolean).sort((a,b) => a-b);
+  const medDur = durs.length ? durs[Math.floor(durs.length/2)] : null;
+  const subs = list.map(v => v.chn.subs).filter(x => x != null).sort((a,b) => a-b);
+  const small = list.filter(v => (v.chn.subs ?? 1e12) < 100000).length;
+  const chCnt = {}; list.forEach(v => chCnt[v.ch] = (chCnt[v.ch]||0) + 1);
+  const topCh = Object.entries(chCnt).sort((a,b) => b[1]-a[1]).slice(0, 8);
+  const judged = list.filter(v => S.tn[v.id]?.j);
+  const yes = judged.filter(v => S.tn[v.id].j > 0);
+  const tagCnt = {}; yes.forEach(v => (S.tn[v.id].tags||[]).forEach(t => tagCnt[t] = (tagCnt[t]||0) + 1));
+  const sel = (k, opts) => `<select onchange="setTF('${k}',this.value)">${opts.map(([v,t]) => `<option value="${v}" ${f[k]==v?'selected':''}>${t}</option>`).join('')}</select>`;
+  const noTrend = !(S.V.some(v => (v.src||[]).some(s => s.startsWith('tr:'))));
+  return `
+  ${noTrend ? `<div class="notice">트렌드 레이더 검색은 <b>매일 06시 전체 스캔</b> 때 돕니다. 업데이트 직후라면 Actions 에서 Run workflow → <b>full</b> 을 한 번 돌려주세요. ${actionsLink()}</div>` : ''}
+  <div class="notice" style="border-color:rgba(54,207,201,.4);background:rgba(54,207,201,.06)">
+    🧓 <b>50대 아저씨로 빙의해서</b> 보세요. 영상을 눌러 재생해 보고 "멈춰서 끝까지 볼까? 두 번 돌려볼까?"를 판단해 👍/👎 로 남기면, 👍 영상의 공통 태그가 아래에 쌓입니다.
+  </div>
+  <div class="filters">
+    <div class="f"><label>검색 (제목·채널)</label><input class="wide" value="${esc(f.q)}" placeholder="예: 결말" onchange="setTF('q',this.value)"></div>
+    <div class="f"><label>업로드</label>${sel('days',[['3','3일'],['7','7일'],['10','10일'],['14','14일'],['30','30일']])}</div>
+    <div class="f"><label>조회수 최소</label>${sel('min',[['100000','10만'],['300000','30만'],['500000','50만'],['1000000','100만'],['3000000','300만']])}</div>
+    <div class="f"><label>장르</label>${sel('md',[['1','영화·드라마만'],['','쇼츠 전체']])}</div>
+    <div class="f"><label>보기</label>${sel('unseen',[['','전부'],['1','안 본 것만']])}</div>
+    <div class="f"><label>정렬</label>${sel('sort',[['v','조회수'],['g24','24시간 증가'],['ratio','구독자 대비'],['new','최신 업로드']])}</div>
+    <button class="btn" onclick="resetTF()">초기화</button>
+    <button class="btn" onclick="copyTrend()">📋 분석용 복사 (Claude에 붙여넣기)</button>
+  </div>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card tile"><div class="k">조건에 맞는 쇼츠</div><div class="v">${list.length}개</div><div class="s">새로 들어옴 <b class="up">${nNew}</b>개 (30시간 이내)</div></div>
+    <div class="card tile"><div class="k">길이 중앙값</div><div class="v">${medDur ? medDur+'초' : '–'}</div><div class="s">${durs.length ? `짧은 것 ${durs[0]}초 · 긴 것 ${durs.at(-1)}초` : ''}</div></div>
+    <div class="card tile"><div class="k">채널 규모</div><div class="v">${subs.length ? fmt(subs[Math.floor(subs.length/2)]) : '–'}</div><div class="s">구독자 중앙값 · 10만 미만 채널 ${small}개</div></div>
+    <div class="card tile"><div class="k">내 판단</div><div class="v">👍 ${yes.length} · 👎 ${judged.length - yes.length}</div><div class="s">${list.length - list.filter(v=>S.tn[v.id]?.seen).length}개 아직 안 봄</div></div>
+  </div>
+  <div class="grid g3" style="margin-bottom:16px">
+    <div class="card"><h2>🔤 제목에 자주 나오는 단어</h2><div class="words">${topWords(list).map(([w,n]) => `<span>${esc(w)}<b>${n}</b></span>`).join('') || '<span class="mut">데이터 부족</span>'}</div></div>
+    <div class="card"><h2>📺 여러 번 터진 채널</h2><div class="list">${topCh.filter(([,n]) => n >= 2).map(([id,n]) => { const c = S.channels[id]; return c ? chRow(c, `<div class="num big">${n}개</div>`) : ''; }).join('') || '<div class="sub">2개 이상 터진 채널 없음</div>'}</div></div>
+    <div class="card"><h2>👍 영상의 공통점 <small>내가 남긴 태그</small></h2><div class="words">${Object.entries(tagCnt).sort((a,b) => b[1]-a[1]).map(([t,n]) => `<span>${esc(t)}<b>${n}</b></span>`).join('') || '<span class="mut">영상을 열어 👍 와 태그를 남기면 여기에 모입니다</span>'}</div></div>
+  </div>
+  <div class="tgrid">${list.slice(0, tLimit).map((v,i) => tCard(v, i+1)).join('') || '<div class="empty">조건에 맞는 쇼츠가 없습니다. 조회수 최소값을 낮추거나 기간을 늘려보세요.</div>'}</div>
+  ${list.length > tLimit ? `<button class="btn more" onclick="tLimit+=60;render()">더 보기 (${list.length - tLimit}개 남음)</button>` : ''}`;
+}
+function tCard(v, rank){
+  const n = S.tn[v.id] || {};
+  return `<div class="tcard ${n.seen ? 'seen' : ''}" onclick="openTrend('${v.id}')">
+    <div class="tthumb"><img loading="lazy" src="${esc(v.th)}" alt=""><span class="r">${rank}</span>${v._new ? '<span class="n">NEW</span>' : ''}<span class="d">${v.dur}초</span>${n.j ? `<span class="j">${n.j > 0 ? '👍' : '👎'}</span>` : ''}</div>
+    <div class="tbody">
+      <div class="tv">${fmt(v.v)}<span class="sub" style="font-weight:400"> 회 · ${ago(v.pub)}</span></div>
+      <div class="vt" title="${esc(v.t)}">${esc(v.t)}</div>
+      <div class="sub">${esc(v.chn.t)} · 구독 ${fmt(v.chn.subs)}</div>
+      <div class="sub">${v.g24 != null ? `24h +${fmt(v.g24)}${v.gEst ? '*' : ''}` : ''}${v.ratio != null ? ` · 구독 ${fmt(v.ratio)}배` : ''}${v.lr != null ? ` · 좋아요 ${v.lr}%` : ''}</div>
+    </div></div>`;
+}
+function setTF(k, v){ TF[k] = v.trim(); LS.set('tr_tf', TF); tLimit = 60; render(); }
+function resetTF(){ Object.assign(TF, TF0()); LS.set('tr_tf', TF); render(); }
+function tnSet(id, patch){ S.tn[id] = Object.assign({at: Date.now()/1000}, S.tn[id], patch); saveTn(); }
+function openTrend(id){
+  const v = S.videos[id]; if(!v) return;
+  tnSet(id, {seen: true});
+  const draw = () => {
+    const n = S.tn[id] || {};
+    document.getElementById('tside').innerHTML = `
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px">${esc(v.t)}</div>
+      <div class="sub" style="margin-bottom:10px;white-space:normal"><span class="vch" onclick="openCh('${v.ch}')">${esc(v.chn.t)}</span> · 구독 ${fmt(v.chn.subs)} · ${ago(v.pub)} · ${v.dur}초</div>
+      <div class="stats" style="margin-bottom:14px">
+        <div><span>조회수</span><b>${fmt(v.v)}</b></div>
+        <div><span>24h 증가${v.gEst ? '*' : ''}</span><b class="big">${v.g24 != null ? '+'+fmt(v.g24) : '–'}</b></div>
+        <div><span>구독 대비</span><b>${v.ratio != null ? fmt(v.ratio)+'배' : '–'}</b></div>
+        <div><span>좋아요율</span><b>${v.lr != null ? v.lr+'%' : '–'}</b></div>
+        <div><span>댓글</span><b>${fmt(v.c)}</b></div>
+        <div><span>시간당</span><b>${fmt(v.vph)}</b></div>
+      </div>
+      <h2>50대 아저씨라면?</h2>
+      <div class="judge" style="margin-bottom:14px">
+        <button class="y ${n.j > 0 ? 'on' : ''}" onclick="tnSet('${id}',{j:${n.j > 0 ? 0 : 1}});__draw()">👍 멈춰서 끝까지 본다</button>
+        <button class="n ${n.j < 0 ? 'on' : ''}" onclick="tnSet('${id}',{j:${n.j < 0 ? 0 : -1}});__draw()">👎 넘긴다</button>
+      </div>
+      <h2>왜? <small>해당하는 것 고르기</small></h2>
+      <div class="words" style="margin-bottom:14px">${TAGS.map(t => `<button class="tagbtn ${(n.tags||[]).includes(t) ? 'on' : ''}" onclick="toggleTag('${id}','${t}')">${t}</button>`).join('')}</div>
+      <h2>메모 <small>후킹 첫 3초, 자막 위치·폰트, 편집 템포, 내 영상과 다른 점</small></h2>
+      <textarea style="min-height:120px" placeholder="예: 첫 프레임에 결말 장면부터 보여줌. 자막 상단 큰 노란 글씨. 컷이 1.5초마다 바뀜." oninput="tnSet('${id}',{memo:this.value})">${esc(n.memo || '')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <a class="btn" href="https://www.youtube.com/shorts/${id}" target="_blank" rel="noopener">유튜브에서 열기 ↗</a>
+        <button class="btn" onclick="tnSet('${id}',{seen:false});closeM();render()">안 본 걸로 되돌리기</button>
+      </div>`;
+  };
+  window.__draw = draw;
+  document.getElementById('mbox').innerHTML = `
+    <div style="display:flex;justify-content:flex-end"><button class="x" onclick="closeM()">×</button></div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+      <iframe class="player" src="https://www.youtube.com/embed/${id}?autoplay=1&loop=1&playlist=${id}&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+      <div id="tside" style="flex:1;min-width:260px"></div>
+    </div>`;
+  draw();
+  document.getElementById('modal').classList.add('on');
+}
+function toggleTag(id, t){
+  const tags = new Set(S.tn[id]?.tags || []);
+  tags.has(t) ? tags.delete(t) : tags.add(t);
+  tnSet(id, {tags: [...tags]}); window.__draw && window.__draw();
+}
+function copyTrend(){
+  const list = trendList(TF).sort((a,b) => (b.v||0) - (a.v||0));
+  const lines = list.map((v,i) => {
+    const n = S.tn[v.id] || {};
+    return `${i+1}. ${v.t}\n   조회 ${fmt(v.v)} · ${v.dur}초 · ${ago(v.pub)} · 채널 ${v.chn.t}(구독 ${fmt(v.chn.subs)}) · 좋아요 ${v.lr ?? '–'}%`
+      + (n.j ? ` · 내 판단 ${n.j > 0 ? '👍' : '👎'}` : '') + ((n.tags||[]).length ? ` · 태그 ${n.tags.join(', ')}` : '')
+      + (n.memo ? `\n   메모: ${n.memo.replace(/\s+/g, ' ')}` : '') + `\n   https://youtube.com/shorts/${v.id}`;
+  });
+  const txt = `[트렌드 레이더] 최근 ${TF.days}일 · 조회수 ${fmt(+TF.min)} 이상 ${TF.md ? '영화·드라마' : '전체'} 쇼츠 ${list.length}개\n`
+    + `타깃: 50대 남성 시청자. 아래 영상들의 공통 패턴(후킹, 길이, 제목, 편집)과 내 채널이 바꿔야 할 점을 분석해줘.\n\n` + lines.join('\n');
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(
+    () => alertBox(`${list.length}개 영상 정보를 복사했습니다. Claude 대화창에 붙여넣으세요.`),
+    () => alertBox('복사하지 못했습니다. 브라우저 권한을 확인하세요.'));
 }
 
 // ---------------- 대시보드 ----------------
@@ -483,12 +670,12 @@ function openCh(id){
   <div class="vgrid">${vids.slice(0,24).map(v=>vCard(v)).join('')}</div>`;
   document.getElementById('modal').classList.add('on');
 }
-function closeM(){document.getElementById('modal').classList.remove('on')}
+function closeM(){const m=document.getElementById('modal');if(!m.classList.contains('on'))return;m.classList.remove('on');document.getElementById('mbox').innerHTML='';if(S.view==='trend')render()}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeM()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeM()});
 
 // ---------------- 라우팅 ----------------
-const VIEWS={dash:vDash,videos:vVideos,channels:vChannels,top:vTop,favs:vFavs,log:vLog};
+const VIEWS={trend:vTrend,dash:vDash,videos:vVideos,channels:vChannels,top:vTop,favs:vFavs,log:vLog};
 function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.view));
   document.getElementById('app').innerHTML=VIEWS[S.view]();
