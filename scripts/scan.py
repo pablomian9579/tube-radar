@@ -192,6 +192,9 @@ def update_video(videos, it, source=None):
         v["sh"] = True
     if source and source not in v["src"]:
         v["src"] = (v["src"] + [source])[-5:]
+    # 영화·드라마 판별 (제목·태그·설명 앞부분·카테고리)
+    blob = " ".join([v["t"], " ".join(sn.get("tags", [])[:15]), sn.get("description", "")[:200]])
+    v["md"] = bool(MD_RE.search(blob)) or v["cat"] == "1"
     views, likes, comments = num(st.get("viewCount")), num(st.get("likeCount")), num(st.get("commentCount"))
     if views is not None:
         now_h = round(NOW / 3600, 2)
@@ -253,6 +256,9 @@ def search_keywords(api, cfg, log):
         log.append(f"오늘의 로테이션 검색어 {len(todays)}개 / 전체 {len(pool)}개")
     for kw in list(cfg["keywords"]) + todays:
         for dur in variants:
+            if not api.can(100 + SEARCH_RESERVE):
+                log.append("쿼터 여유분을 남기려고 나머지 키워드 검색은 내일로 미룸")
+                return found
             data = api.get("search", part="id", q=kw, type="video", order="viewCount",
                            publishedAfter=after, regionCode=cfg["region"],
                            relevanceLanguage=cfg["language"], videoDuration=dur, maxResults=50)
@@ -263,6 +269,47 @@ def search_keywords(api, cfg, log):
                     found.append((vid, f"kw:{kw}"))
                     n += 1
             log.append(f"검색 '{kw}'{' (쇼츠)' if dur else ''}: {n}개")
+    return found
+
+
+SEARCH_RESERVE = 700  # 검색 후 영상·채널 갱신에 남겨둘 units
+
+TREND_DEFAULT = {
+    "days": 10,
+    "min_views": 500000,
+    "keywords": [
+        "영화 쇼츠", "드라마 쇼츠", "영화 명장면", "드라마 명장면",
+        "#영화추천", "#드라마추천", "넷플릭스 추천", "영화 리뷰 쇼츠",
+    ],
+}
+MD_RE = re.compile(r"영화|드라마|명장면|결말|넷플|시즌\s*\d|에피소드|\bep\.?\s*\d|movie|film|drama|kdrama|애니|티빙|디즈니\+|쿠팡플레이|웨이브", re.I)
+
+
+def trend_cfg(cfg):
+    t = dict(TREND_DEFAULT)
+    t.update(cfg.get("trend") or {})
+    return t
+
+
+def search_trend(api, cfg, log):
+    """트렌드 레이더: 최근 N일 영화·드라마 쇼츠를 조회수 순으로."""
+    t = trend_cfg(cfg)
+    after = (datetime.now(timezone.utc) - timedelta(days=t["days"])).strftime("%Y-%m-%dT%H:%M:%SZ")
+    found = []
+    for kw in t["keywords"]:
+        if not api.can(100 + SEARCH_RESERVE):
+            log.append("트렌드 검색 중 쿼터 여유분 도달")
+            break
+        data = api.get("search", part="id", q=kw, type="video", order="viewCount",
+                       publishedAfter=after, regionCode=cfg["region"],
+                       relevanceLanguage=cfg["language"], videoDuration="short", maxResults=50)
+        n = 0
+        for it in (data or {}).get("items", []):
+            vid = it.get("id", {}).get("videoId")
+            if vid:
+                found.append((vid, f"tr:{kw}"))
+                n += 1
+        log.append(f"트렌드 '{kw}': {n}개")
     return found
 
 
@@ -408,7 +455,10 @@ def main():
         try:
             need_ch = set(watch)
             # 1) 후보 발굴
-            found = popular(api, cfg, log)
+            found = []
+            if args.mode == "full":
+                found += search_trend(api, cfg, log)  # 트렌드 먼저 (출처 표시가 tr: 로 남도록)
+            found += popular(api, cfg, log)
             if args.mode == "full":
                 found += search_keywords(api, cfg, log)
             src = {}
@@ -508,6 +558,7 @@ def main():
     if status != "error":
         meta["lastOk"] = NOW
     meta["cfg"] = {k: cfg.get(k) for k in ("keywords", "region", "search_days", "video_max_age_days", "rpm_krw", "daily_unit_budget")}
+    meta["cfg"]["trend"] = trend_cfg(cfg)
     meta["counts"] = {"videos": len(videos), "channels": len(channels)}
 
     save(P("videos.json"), videos)
